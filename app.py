@@ -1,7 +1,7 @@
 import streamlit as st
 import cv2
 import numpy as np
-import time
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 
 # ------------------------------------------------------------------------------
 # Page Configuration and App Title
@@ -41,7 +41,7 @@ def detect_smiles(frame, scale=0.5):
     Detect faces and smiles in the provided frame and annotate them.
 
     Args:
-        frame (np.ndarray): The input image frame from the webcam.
+        frame (np.ndarray): The input image frame (in BGR format).
         scale (float): Downscaling factor to speed up processing.
 
     Returns:
@@ -98,55 +98,28 @@ def detect_smiles(frame, scale=0.5):
     return frame
 
 # ------------------------------------------------------------------------------
-# Webcam Control via Streamlit Session State
+# Video Transformer for Real-Time Smile Detection using streamlit-webrtc
 # ------------------------------------------------------------------------------
-if 'run' not in st.session_state:
-    st.session_state.run = False
+class SmileDetectionTransformer(VideoTransformerBase):
+    def transform(self, frame):
+        """
+        Process each video frame to detect faces and smiles.
+        The input frame is provided in an 'av.VideoFrame' format.
+        Returns:
+            The annotated frame in BGR format.
+        """
+        # Convert the incoming frame to a numpy array (BGR format).
+        img = frame.to_ndarray(format="bgr24")
 
-# Sidebar Buttons for Starting/Stopping the Webcam
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    if st.button("Start Webcam 😊"):
-        st.session_state.run = True
-with col2:
-    if st.button("Stop Webcam 🛑"):
-        st.session_state.run = False
+        # Mirror the frame for a natural selfie view.
+        img = cv2.flip(img, 1)
 
-# Placeholder for displaying the webcam frames
-frame_placeholder = st.empty()
+        # Process the frame to detect and annotate smiles.
+        img = detect_smiles(img, scale=0.5)
+        return img
 
 # ------------------------------------------------------------------------------
-# Main Loop: Capture and Process Webcam Frames
+# Run the Real-Time Smile Detection via WebRTC
 # ------------------------------------------------------------------------------
-cap = cv2.VideoCapture(0)  # Open the default webcam
-
-if st.session_state.run:
-    st.write("Webcam is running... Click **Stop Webcam 🛑** in the sidebar to end the session.")
-    try:
-        while st.session_state.run:
-            ret, frame = cap.read()
-            if not ret:
-                st.error("Failed to capture video from the webcam.")
-                break
-
-            # Mirror the frame for a natural interaction.
-            frame = cv2.flip(frame, 1)
-
-            # Process the frame to detect faces and smiles.
-            processed_frame = detect_smiles(frame, scale=0.5)
-
-            # Convert color space from BGR to RGB for correct display in Streamlit.
-            processed_frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-
-            # Display the annotated frame using the updated parameter.
-            frame_placeholder.image(processed_frame_rgb, channels="RGB", use_container_width=True)
-
-            # A short sleep to control the frame rate.
-            time.sleep(0.03)
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
-    finally:
-        cap.release()
-        st.session_state.run = False
-else:
-    st.write("Click **Start Webcam 😊** in the sidebar to activate your camera.")
+st.write("Please allow access to your webcam for real-time smile detection.")
+webrtc_streamer(key="smile-detection", video_transformer_factory=SmileDetectionTransformer)
